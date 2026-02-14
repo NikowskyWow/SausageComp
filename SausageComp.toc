@@ -1,0 +1,8 @@
+## Interface: 30300
+## Title: |cffffd100SAUSAGE|rCOMP
+## Notes: Raid composition and synergy tracker for Warmane.
+## Author: Sausage Party / Kokotiar
+## Version: 1.0.0
+## SavedVariables: SausageCompDB
+
+SausageComp.lua
