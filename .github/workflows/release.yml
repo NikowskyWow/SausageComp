@@ -27,7 +27,7 @@ jobs:
           # Nájde riadok "## Version: ..." a nahradí ho verziou z tagu
           sed -i "s/^## Version: .*/## Version: ${{ env.VERSION }}/" SausageComp.toc
           sed -i "s/local SAUSAGE_VERSION = \".*\"/local SAUSAGE_VERSION = \"${{ env.VERSION }}\"/" SausageComp.lua 
-          sed -i "s/^Version: .*/Version: ${{ env.VERSION }}/" readme.md
+          [ -f readme.md ] && sed -i "s/^Version: .*/Version: ${{ env.VERSION }}/" readme.md || true
       - name: Commit and Push Version Update
         run: |
           git config user.name "github-actions[bot]"
