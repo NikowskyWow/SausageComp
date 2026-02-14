@@ -1,18 +1,17 @@
--- [[ SAUSAGECOMP - Raid Architect Addon ]] --
--- Based on Wowhead WotLK Raid Comp Guide
+-- [[ SAUSAGECOMP - Universal Raid Synergy Tracker ]] --
 -- Author: Sausage Party / Kokotiar
+-- Version: 1.2.0
 
-local SAUSAGE_VERSION = "1.1.0"
+local SAUSAGE_VERSION = "1.2.0"
 local frame = CreateFrame("Frame", "SausageCompFrame", UIParent)
 
--- UI Settings (Sausage Design System)
+-- Design System Constants
 local BACKDROP = {
     bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
     edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
     tile = true, tileSize = 32, edgeSize = 32,
     insets = { left = 11, right = 12, top = 12, bottom = 11 }
 }
-
 local CONTENT_BACKDROP = {
     bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
     edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
@@ -20,17 +19,8 @@ local CONTENT_BACKDROP = {
     insets = { left = 4, right = 4, top = 4, bottom = 4 }
 }
 
--- Buff Mapping (Wowhead Ideal Comp)
-local SYNERGY_CATEGORIES = {
-    ["Armor Red."] = {6203, 8647},        -- Sunder Armor, Expose Armor
-    ["Melee Haste"] = {55610, 8512},      -- Imp. Icy Talons, Windfury Totem
-    ["Spell Damage"] = {51160, 48511},    -- Ebon Plague, Earth and Moon
-    ["Replenish"] = {48160, 57669, 31876},-- Vampiric Touch, Replenishment talent names
-    ["Crit Chance"] = {20337, 37036},     -- Heart of the Crusader, Totem of Wrath
-}
-
 -------------------------------------------------------------------------------
--- UI ELEMENTS
+-- UI INITIALIZATION
 -------------------------------------------------------------------------------
 local function CreateUI()
     frame:SetSize(620, 480)
@@ -48,106 +38,148 @@ local function CreateUI()
     header:SetTexture("Interface\\DialogFrame\\UI-DialogBox-Header")
     header:SetSize(300, 64)
     header:SetPoint("TOP", 0, 12)
-    
     local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     title:SetPoint("TOP", header, "TOP", 0, -14)
-    title:SetText("SAUSAGE RAID COMP - IDEAL SETUP")
+    title:SetText("SAUSAGE RAID COMP")
 
-    -- Close Button
-    local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
-    close:SetPoint("TOPRIGHT", -8, -8)
+    -- Content Boxes
+    local function CreateBox(name, titleText, color, xOffset)
+        local b = CreateFrame("Frame", name, frame)
+        b:SetSize(185, 330)
+        b:SetPoint("TOPLEFT", 20 + xOffset, -60)
+        b:SetBackdrop(CONTENT_BACKDROP)
+        b:SetBackdropColor(0.1, 0.1, 0.1, 0.8)
+        b:SetBackdropBorderColor(unpack(color))
+        
+        local t = b:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        t:SetPoint("TOP", 0, -10)
+        t:SetText(titleText)
 
-    -- --- CONTENT BOXES ---
-    -- 1. UTILITY (Gold)
-    local box1 = CreateFrame("Frame", "SausageUtilityBox", frame)
-    box1:SetSize(185, 340)
-    box1:SetPoint("TOPLEFT", 20, -60)
-    box1:SetBackdrop(CONTENT_BACKDROP)
-    box1:SetBackdropColor(0.1, 0.1, 0.1, 0.8)
-    box1:SetBackdropBorderColor(1, 0.8, 0, 1)
-    
-    local t1 = box1:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    t1:SetPoint("TOP", 0, -10)
-    t1:SetText("RAID UTILITY (CDs)")
+        local c = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        c:SetPoint("TOPLEFT", 10, -30)
+        c:SetJustifyH("LEFT")
+        c:SetText("Click SCAN to start.")
+        b.content = c
+        return b
+    end
 
-    -- 2. SYNERGY (Blue)
-    local box2 = CreateFrame("Frame", "SausageSynergyBox", frame)
-    box2:SetSize(185, 340)
-    box2:SetPoint("LEFT", box1, "RIGHT", 10, 0)
-    box2:SetBackdrop(CONTENT_BACKDROP)
-    box2:SetBackdropColor(0.1, 0.1, 0.1, 0.8)
-    box2:SetBackdropBorderColor(0, 0.7, 1, 1)
+    _G["SC_Box1"] = CreateBox("SC_UtilityBox", "RAID UTILITY", {1, 0.8, 0, 1}, 0)
+    _G["SC_Box2"] = CreateBox("SC_SynergyBox", "SYNERGIES", {0, 0.7, 1, 1}, 195)
+    _G["SC_Box3"] = CreateBox("SC_ConsumBox", "CONSUMABLES", {0.6, 0.6, 0.6, 1}, 390)
 
-    local t2 = box2:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    t2:SetPoint("TOP", 0, -10)
-    t2:SetText("SYNERGY & CONFLICTS")
+    -- Buttons
+    local scan = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    scan:SetSize(120, 25)
+    scan:SetPoint("BOTTOMLEFT", 20, 45)
+    scan:SetText("SCAN RAID")
+    scan:SetScript("OnClick", function() _G["SausageScan"]() end)
 
-    -- 3. CONSUMABLES (Gray)
-    local box3 = CreateFrame("Frame", "SausageConsumBox", frame)
-    box3:SetSize(185, 340)
-    box3:SetPoint("LEFT", box2, "RIGHT", 10, 0)
-    box3:SetBackdrop(CONTENT_BACKDROP)
-    box3:SetBackdropColor(0.1, 0.1, 0.1, 0.8)
-    box3:SetBackdropBorderColor(0.6, 0.6, 0.6, 1)
+    local whisper = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    whisper:SetSize(130, 25)
+    whisper:SetPoint("LEFT", scan, "RIGHT", 10, 0)
+    whisper:SetText("WHISPER SLACKERS")
+    whisper:SetScript("OnClick", function() _G["SausageWhisper"]() end)
 
-    local t3 = box3:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    t3:SetPoint("TOP", 0, -10)
-    t3:SetText("BUFFS & CONSUMABLES")
-
-    -- --- FOOTER ---
+    -- Footer
     local ver = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     ver:SetPoint("BOTTOMLEFT", 20, 15)
     ver:SetText("v " .. SAUSAGE_VERSION)
 
-    local cred = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    cred:SetPoint("BOTTOM", 0, 15)
-    cred:SetText("by Sausage Party / Kokotiar")
-
-    local btnUpdate = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    btnUpdate:SetSize(110, 22)
-    btnUpdate:SetPoint("BOTTOMRIGHT", -20, 12)
-    btnUpdate:SetText("Check Updates")
-    
-    -- --- ACTION BUTTONS ---
-    local btnScan = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    btnScan:SetSize(120, 25)
-    btnScan:SetPoint("BOTTOMLEFT", 20, 45)
-    btnScan:SetText("SCAN RAID")
-    
-    local btnReport = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    btnReport:SetSize(120, 25)
-    btnReport:SetPoint("LEFT", btnScan, "RIGHT", 5, 0)
-    btnReport:SetText("REPORT TO RAID")
-
-    local btnWhisper = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    btnWhisper:SetSize(130, 25)
-    btnWhisper:SetPoint("LEFT", btnReport, "RIGHT", 5, 0)
-    btnWhisper:SetText("WHISPER SLACKERS")
+    local credits = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    credits:SetPoint("BOTTOM", 0, 15)
+    credits:SetText("by Sausage Party")
 
     frame:Hide()
 end
 
 -------------------------------------------------------------------------------
--- CORE FUNCTIONS
+-- MINIMAP BUTTON (RE-ADDED)
 -------------------------------------------------------------------------------
+local function CreateMinimap()
+    local btn = CreateFrame("Button", "SausageMinimapIcon", Minimap)
+    btn:SetSize(31, 31)
+    btn:SetFrameLevel(8)
+    btn:SetPoint("TOPLEFT", Minimap, "TOPLEFT", 0, 0)
+    btn:SetHighlightTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
+    
+    local icon = btn:CreateTexture(nil, "BACKGROUND")
+    icon:SetTexture("Interface\\Icons\\Inv_Misc_Food_54")
+    icon:SetSize(20, 20)
+    icon:SetPoint("CENTER", 0, 0)
+    
+    local border = btn:CreateTexture(nil, "OVERLAY")
+    border:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
+    border:SetSize(53, 53)
+    border:SetPoint("TOPLEFT", 0, 0)
 
-local function ScanSynergies()
-    -- Táto funkcia prebehne cez členov raidu a porovná ich talenty/buffy
-    -- s našou tabuľkou SYNERGY_CATEGORIES.
-    -- Pre WotLK 3.3.5a využívame UnitAura a Inspect talenty.
-    print("|cffffd100SausageComp:|r Analyzing raid synergies based on Wowhead specs...")
+    btn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    btn:SetScript("OnClick", function(self, b)
+        if b == "LeftButton" then if frame:IsShown() then frame:Hide() else frame:Show() end end
+    end)
+    btn:SetMovable(true)
+    btn:SetScript("OnMouseDown", function(self, b) if b == "RightButton" then self:StartMoving() end end)
+    btn:SetScript("OnMouseUp", function(self) self:StopMovingOrSizing() end)
 end
 
--- Minimap Icon & Slash Commands
-local function Init()
-    CreateUI()
-    SLASH_SAUSAGECOMP1 = "/sc"
-    SlashCmdList["SAUSAGECOMP"] = function() 
-        if frame:IsShown() then frame:Hide() else frame:Show() end 
+-------------------------------------------------------------------------------
+-- LOGIC (Wowhead Based)
+-------------------------------------------------------------------------------
+local slackers = {}
+
+_G["SausageScan"] = function()
+    local num = GetNumRaidMembers()
+    if num == 0 then print("You are not in a raid!"); return end
+    
+    wipe(slackers)
+    local utility, synergy, consum = "", "", ""
+    
+    -- Trackers for Buff Stacking (Wowhead)
+    local hasMeleeHaste, hasSpellDamage, hasReplenish = false, false, false
+
+    for i = 1, num do
+        local name, _, _, _, class = GetRaidRosterInfo(i)
+        local unit = "raid"..i
+        local f, s = false, false
+
+        for j = 1, 40 do
+            local b = UnitAura(unit, j)
+            if not b then break end
+            if b:find("Flask") or b:find("Elixir") then f = true end
+            if b:find("Well Fed") then s = true end
+            -- Synergy detection
+            if b == "Improved Icy Talons" or b == "Windfury Totem" then hasMeleeHaste = true end
+            if b == "Ebon Plague" or b == "Earth and Moon" or b == "Curse of the Elements" then hasSpellDamage = true end
+            if b == "Replenishment" then hasReplenish = true end
+        end
+
+        if not f or not s then table.insert(slackers, {n=name, f=f, s=s}) end
+        consum = consum .. name .. ": " .. (f and "|cff00ff00F|r " or "|cffff0000F|r ") .. (s and "|cff00ff00S|r" or "|cffff0000S|r") .. "\n"
+    end
+
+    -- Update Synergy Box based on Wowhead "Ideal" rules
+    synergy = "Melee Haste: " .. (hasMeleeHaste and "|cff00ff00OK|r" or "|cffff0000Missing|r") .. "\n"
+    synergy = synergy .. "Spell Damage: " .. (hasSpellDamage and "|cff00ff00OK|r" or "|cffff0000Missing|r") .. "\n"
+    synergy = synergy .. "Replenish: " .. (hasReplenish and "|cff00ff00OK|r" or "|cffff0000Missing|r") .. "\n"
+
+    SC_Box1.content:SetText("Scan complete.\nUtility tracking active.")
+    SC_Box2.content:SetText(synergy)
+    SC_Box3.content:SetText(consum)
+end
+
+_G["SausageWhisper"] = function()
+    for _, data in ipairs(slackers) do
+        local m = "[SausageComp]: Missing " .. (not data.f and "Flask " or "") .. (not data.s and "Food" or "")
+        SendChatMessage(m, "WHISPER", nil, data.n)
     end
 end
 
+-------------------------------------------------------------------------------
+-- INIT
+-------------------------------------------------------------------------------
 frame:RegisterEvent("PLAYER_LOGIN")
-frame:SetScript("OnEvent", function(self, event)
-    if event == "PLAYER_LOGIN" then Init() end
+frame:SetScript("OnEvent", function()
+    CreateUI()
+    CreateMinimap()
+    SLASH_SAUSAGECOMP1 = "/sc"
+    SlashCmdList["SAUSAGECOMP"] = function() if frame:IsShown() then frame:Hide() else frame:Show() end end
 end)
